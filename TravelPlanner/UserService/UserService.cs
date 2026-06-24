@@ -1,51 +1,67 @@
-using System;
-using System.Collections.Generic;
-using System.Fabric;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.ServiceFabric.Services.Communication.Runtime;
 using Microsoft.ServiceFabric.Services.Runtime;
+using Microsoft.ServiceFabric.Services.Remoting.Runtime;
+using Microsoft.EntityFrameworkCore;
+using System.Fabric;
+using TravelPlanner.Common.Interfaces;
+using UserService.Data;
+using UserService.Services;
+using TravelPlanner.Common.Shared.DTOs;
+using TravelPlanner.Common.DTOs.User;
 
 namespace UserService
 {
-    /// <summary>
-    /// An instance of this class is created for each service instance by the Service Fabric runtime.
-    /// </summary>
-    internal sealed class UserService : StatelessService
+    internal sealed class UserService : StatelessService, IUserService
     {
+        private readonly DbContextOptions<UserDbContext> _dbOptions;
+
         public UserService(StatelessServiceContext context)
             : base(context)
-        { }
-
-        /// <summary>
-        /// Optional override to create listeners (e.g., TCP, HTTP) for this service replica to handle client or user requests.
-        /// </summary>
-        /// <returns>A collection of listeners.</returns>
-        protected override IEnumerable<ServiceInstanceListener> CreateServiceInstanceListeners()
         {
-            return new ServiceInstanceListener[0];
+            var optionsBuilder = new DbContextOptionsBuilder<UserDbContext>();
+            optionsBuilder.UseSqlServer("Server=localhost;Database=TravelPlannerUsersNextDB;Trusted_Connection=True;TrustServerCertificate=True;");
+            _dbOptions = optionsBuilder.Options;
         }
 
-        /// <summary>
-        /// This is the main entry point for your service instance.
-        /// </summary>
-        /// <param name="cancellationToken">Canceled when Service Fabric needs to shut down this service instance.</param>
-        protected override async Task RunAsync(CancellationToken cancellationToken)
+        public async Task<ResultDto<UserDto>> RegisterAsync(UserRegisterDto dto)
         {
-            // TODO: Replace the following sample code with your own logic 
-            //       or remove this RunAsync override if it's not needed in your service.
-
-            long iterations = 0;
-
-            while (true)
+            using (var context = new UserDbContext(_dbOptions))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                ServiceEventSource.Current.ServiceMessage(this.Context, "Working-{0}", ++iterations);
-
-                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+                var domainService = new UserDomainService(context);
+                return await domainService.RegisterUserAsync(dto);
             }
+        }
+
+        public async Task<ResultDto<string>> LoginAsync(UserLoginDto dto)
+        {
+            using (var context = new UserDbContext(_dbOptions))
+            {
+                var domainService = new UserDomainService(context);
+                return await domainService.LoginUserAsync(dto);
+            }
+        }
+
+        public async Task<ResultDto<UserDto>> GetUserByIdAsync(Guid id)
+        {
+            using (var context = new UserDbContext(_dbOptions))
+            {
+                var domainService = new UserDomainService(context);
+                return await domainService.GetUserByIdAsync(id);
+            }
+        }
+
+        public async Task<ResultDto<bool>> DeleteUserAsync(Guid id)
+        {
+            using (var context = new UserDbContext(_dbOptions))
+            {
+                var domainService = new UserDomainService(context);
+                return await domainService.RemoveUserAsync(id);
+            }
+        }
+
+        protected override IEnumerable<ServiceInstanceListener> CreateServiceInstanceListeners()
+        {
+            return this.CreateServiceRemotingInstanceListeners();
         }
     }
 }
